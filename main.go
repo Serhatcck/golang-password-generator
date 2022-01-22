@@ -1,137 +1,171 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
 )
 
 var (
-	gunler = []string{"pazartesi", "sali", "carsamba", "persembe", "cuma", "cumartesi", "pazar"}
-	aylar  = []string{"ocak", "subat", "mart", "nisan", "mayis", "temmuz", "haziran", "agustos", "eylul", "ekim", "kasim", "aralik"}
+	days   = []string{"pazartesi", "sali", "carsamba", "persembe", "cuma", "cumartesi", "pazar"}
+	months = []string{"ocak", "subat", "mart", "nisan", "mayis", "temmuz", "haziran", "agustos", "eylul", "ekim", "kasim", "aralik"}
 )
 
-type payloads interface {
-	executePayloads() []string
+type Pattern interface {
+	getList([]string) []string
 }
-type Yil struct {
+
+type Year struct {
 	value int
 }
-type Ay struct {
-	value bool
+
+func (y Year) getList(arr []string) []string {
+	var list []string
+	t := time.Now()
+	nowYear := t.Year()
+
+	for i := 0; i < y.value; i++ {
+		list = append(list, strconv.Itoa(nowYear-i))
+	}
+	return matrix(arr, list)
 }
-type Gun struct {
+
+type Month struct {
+	value int
+}
+
+func (m Month) getList(arr []string) []string {
+	return matrix(arr, months)
+}
+
+type Day struct {
 	value string
 }
 
-type Pattern struct {
-	ay           Ay
-	yil          Yil
-	gun          Gun
-	ozelkarakter []string
-	siralama     []string
-	padding      string
-}
-
-func (yil Yil) executePayloads() []string {
-	var payloads []string
-	t := time.Now()
-	year := t.Year()
-
-	for i := 0; i < yil.value; i++ {
-		payloads = append(payloads, strconv.Itoa(year-i))
-	}
-	return payloads
-}
-
-func (ay Ay) executePayloads() []string {
-	return aylar
-}
-
-func (gun Gun) executePayloads() []string {
-	gunArr := strings.Split(gun.value, "-")
+func (d Day) getList(arr []string) []string {
+	gunArr := strings.Split(d.value, "/")
 	baslangic, _ := strconv.Atoi(gunArr[0])
 	bitis, _ := strconv.Atoi(gunArr[1])
-	return gunler[baslangic:bitis]
+	return matrix(arr, days[baslangic:bitis])
 }
 
-func (pattern Pattern) getField(key string) reflect.Value {
-	r := reflect.ValueOf(pattern)
-	f := reflect.Indirect(r).FieldByName(key)
-	return f
+type Special struct {
+	value string
 }
 
-func (pattern Pattern) payloads(key string, val string) []string {
-	if key == "yil" {
-		return pattern.yilPayloads(val)
-	} else {
-		return []string{}
+func (s Special) getList(arr []string) []string {
+	special := []string{s.value}
+	return matrix(arr, special)
+}
+
+type StringVar struct {
+	value string
+}
+
+func (s StringVar) getList(arr []string) []string {
+	stringVal := []string{s.value}
+	return matrix(arr, stringVal)
+}
+
+type LeftPadding struct {
+	paddingLength int
+	paddingValue  string
+}
+
+func (l LeftPadding) getList(arr []string) []string {
+	for i := 0; i < len(arr); i++ {
+		arr[i] = LeftPadd(arr[i], l.paddingValue, l.paddingLength)
 	}
+
+	return arr
 }
 
-func (pattern Pattern) yilPayloads(val string) []string {
-
-	return []string{}
+func LeftPadd(s string, pad string, plength int) string {
+	for i := len(s); i < plength; i++ {
+		s = pad + s
+	}
+	return s
 }
 
-func (pattern Pattern) generate() {
-	list := []string{}
-	var appendCount = 0
-	for _, key := range pattern.siralama {
-		if appendCount == 0 {
-			list = append(list, getPayloads(pattern, key)...)
-		} else {
-			fmt.Println(key)
-			var matrix = []string{}
-			payloads := getPayloads(pattern, key)
-			for i := 0; i < len(list); i++ {
-				for y := 0; y < len(payloads); y++ {
-					matrix = append(matrix, list[i]+payloads[y])
-				}
-			}
-			list = matrix
-		}
-		appendCount++
-	}
-	for _, l := range list {
-		fmt.Println(l)
-	}
+type RightPadding struct {
+	paddingLength int
+	paddingValue  string
 }
 
-func getPayloads(pattern Pattern, field string) []string {
-	if field == "yil" {
-		return pattern.yil.executePayloads()
-	} else if field == "ay" {
-		return pattern.ay.executePayloads()
-	} else if field == "gun" {
-		return pattern.gun.executePayloads()
+func (r RightPadding) getList(arr []string) []string {
+	for i := 0; i < len(arr); i++ {
+		arr[i] = RightPadd(arr[i], r.paddingValue, r.paddingLength)
 	}
-	return []string{}
+
+	return arr
+}
+
+func RightPadd(s string, pad string, plength int) string {
+	for i := len(s); i < plength; i++ {
+		s = s + pad
+	}
+	return s
 }
 
 func main() {
-	var pattern Pattern
+	payloads := []string{}
+	patterns := parseArgs(os.Args[1:])
+	for _, pattern := range patterns {
+		payloads = pattern.getList(payloads)
+	}
 
-	flag.BoolVar(&pattern.ay.value, "ay", false, "Desene Ay eklensin mi")
-	flag.IntVar(&pattern.yil.value, "yil", 0, "Desende şimdiki yıldan kaç sene önceki yıllar eklensin")
-	flag.StringVar(&pattern.gun.value, "gun", "", "Desen haftanın kaç günü ile dahil edilsin")
-	flag.Parse()
-
-	pattern.siralama = parseArgs(os.Args[1:])
-	pattern.generate()
+	for _, l := range payloads {
+		fmt.Println(l)
+	}
 
 }
 
-func parseArgs(args []string) []string {
-	var parsedArgs []string
+func parseArgs(args []string) []Pattern {
+
+	patterns := []Pattern{}
+
 	for _, str := range args {
-		flag := strings.Split(str, "=")[0]
-		untiredFlag := strings.Split(flag, "-")[1]
-		parsedArgs = append(parsedArgs, untiredFlag)
+		flag := strings.Split(str, "=")
+		untiredFlag := strings.Split(flag[0], "-")[1]
+		if untiredFlag == "yil" {
+			year, _ := strconv.Atoi(flag[1])
+			patterns = append(patterns, Year{year})
+		} else if untiredFlag == "ay" {
+			patterns = append(patterns, Month{})
+		} else if untiredFlag == "gun" {
+			patterns = append(patterns, Day{flag[1]})
+		} else if untiredFlag == "ozel" {
+			patterns = append(patterns, Special{flag[1]})
+		} else if untiredFlag == "std" {
+			patterns = append(patterns, StringVar{flag[1]})
+		} else if untiredFlag == "lpad" {
+			padd := strings.Split(flag[1], "/")
+			paddingLengt, _ := strconv.Atoi(padd[1])
+			patterns = append(patterns, LeftPadding{paddingLength: paddingLengt, paddingValue: padd[0]})
+		} else if untiredFlag == "rpad" {
+			padd := strings.Split(flag[1], "/")
+			paddingLengt, _ := strconv.Atoi(padd[1])
+			patterns = append(patterns, RightPadding{paddingLength: paddingLengt, paddingValue: padd[0]})
+		}
 	}
-	return parsedArgs
+	return patterns
+
+}
+
+func matrix(arr1 []string, arr2 []string) []string {
+
+	//eğer arr1 boş ise foreach in ilk indexi demektir o yüzden arr1 e arr2 değerini atarız
+	if len(arr1) < 1 {
+		arr1 = arr2
+		return arr1
+	}
+	var matrix = []string{}
+	for i := 0; i < len(arr1); i++ {
+		for y := 0; y < len(arr2); y++ {
+			matrix = append(matrix, arr1[i]+arr2[y])
+		}
+	}
+	return matrix
 }
